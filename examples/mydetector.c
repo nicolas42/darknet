@@ -2,7 +2,7 @@
 /*
 make
 clang libdarknet.a examples/mydetector.c -Iinclude -o mydarknet
-./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights data/dog.jpg
+./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
 */
 
 #include "darknet.h"
@@ -590,119 +590,64 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             if(!input) return;
             strtok(input, "\n");
         }
+
+        // Yafoo
         // image im = load_image_color(input,0,0);
+        // Load color image from ffmpeg output pipe instead of loading the image from a file as was done above.
+        // Ted Burke
 
-        // int w = 1280;
-        // int h = 720;
-        // int c = 3;
-//         image im = make_image(w, h, c);
+#define W 1280
+#define H 720
+        unsigned char *data = calloc(H * W * 3, 1);
+        int count = -1;
 
-//         printf("Yafoo width: %d, height: %d channels: %d\n", im.w, im.h, im.c);
-
-// int count = -1;
-// FILE *pipein = popen("ffmpeg -i teapot.mp4 -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", "r");
-// count = fread(im.data, 1, h*w*c, pipein);
-
-// int w, h, c;
-// unsigned char *data = stbi_load(filename, &w, &h, &c, channels);
-
-    #define W 1280
-    #define H 720
-    unsigned char *data = calloc(H*W*3, 1);
-    int count = -1;
-
-    FILE *pipein = popen("ffmpeg -i teapot.mp4 -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", "r");
-    count = fread(data, 1, H*W*3, pipein);
+        char ffmpeg_command[500];
+        snprintf(ffmpeg_command, 500, "ffmpeg -i %s -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", input);
+        FILE *pipein = popen(ffmpeg_command, "r");
+        count = fread(data, 1, H * W * 3, pipein);
 
 
-    int w = 1280;
-    int h = 720;
-    int c = 3;
-    int channels = 3;
+        int w = 1280;
+        int h = 720;
+        int c = 3;
+        int channels = 3;
 
-    if (!data) {
-        fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
-        exit(0);
-    }
-    if(channels) c = channels;
-    int i,j,k;
-    image im = make_image(w, h, c);
-    for(k = 0; k < c; ++k){
-        for(j = 0; j < h; ++j){
-            for(i = 0; i < w; ++i){
-                int dst_index = i + w*j + w*h*k;
-                int src_index = k + c*i + c*w*j;
-                im.data[dst_index] = (float)data[src_index]/255.;
+        if (!data)
+        {
+            fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
+            exit(0);
+        }
+        if (channels)
+            c = channels;
+        int i, j, k;
+        image im = make_image(w, h, c);
+        for (k = 0; k < c; ++k)
+        {
+            for (j = 0; j < h; ++j)
+            {
+                for (i = 0; i < w; ++i)
+                {
+                    int dst_index = i + w * j + w * h * k;
+                    int src_index = k + c * i + c * w * j;
+                    im.data[dst_index] = (float)data[src_index] / 255.;
+                }
             }
         }
-    }
-    free(data);
+        free(data);
 
-    printf("Saving image\n");
-    save_image(im, "from_ffmpeg");  
+        printf("Saving image\n");
+        save_image(im, "from_ffmpeg");
 
-
-    // // Flush and close input and output pipes
-    // fflush(pipein);
-    // pclose(pipein);
-    // // fflush(pipeout);
-    // // pclose(pipeout);
-
-
-/*
-// how char image is converted to a 
-
-image load_image_stb(char *filename, int channels)
-{
-    int w, h, c;
-    unsigned char *data = stbi_load(filename, &w, &h, &c, channels);
-    if (!data) {
-        fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
-        exit(0);
-    }
-    if(channels) c = channels;
-    int i,j,k;
-    image im = make_image(w, h, c);
-    for(k = 0; k < c; ++k){
-        for(j = 0; j < h; ++j){
-            for(i = 0; i < w; ++i){
-                int dst_index = i + w*j + w*h*k;
-                int src_index = k + c*i + c*w*j;
-                im.data[dst_index] = (float)data[src_index]/255.;
-            }
-        }
-    }
-    free(data);
-    return im;
-}
-*/
+        // // Flush and close input and output pipes
+        // fflush(pipein);
+        // pclose(pipein);
+        // // fflush(pipeout);
+        // // pclose(pipeout);
 
 
 
 
 
-
-
-
-/*
-// // Allocate a buffer to store one frame
-// unsigned char frame[H][W][3] = {0};
- 
-void main()
-{
-    int x, y, count;
-     
-    // Open an input pipe from ffmpeg and an output pipe to a second instance of ffmpeg
-    FILE *pipein = popen("ffmpeg -i teapot.mp4 -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", "r");
-    FILE *pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4", "w");
-     
-    // Process video frames
-    while(1)
-    {
-        // Read a frame from the input pipe into the buffer
-        count = fread(frame, 1, H*W*3, pipein);
-
-*/
 
 
         image sized = letterbox_image(im, net->w, net->h);
