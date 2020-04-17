@@ -25,3 +25,8 @@ ehthumbs.db
 Icon?
 Thumbs.db
 *.swp
+*.mp4
+*.weights
+*.a
+*.so
+a.out
