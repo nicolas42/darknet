@@ -641,8 +641,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         }
         free(data);
 
-        printf("Saving ffmpeg_output\n");
-        save_image(im, "ffmpeg_output");
+        printf("Saving image\n");
+        save_image(im, "from_ffmpeg");
 
 
 
