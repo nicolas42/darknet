@@ -586,30 +586,23 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
     strncpy(input, filename, 256);
 
-    // while(1){
-    //     if(filename){
-    //         strncpy(input, filename, 256);
-    //     } else {
-    //         printf("Enter Image Path: ");
-    //         fflush(stdout);
-    //         input = fgets(input, 256, stdin);
-    //         if(!input) return;
-    //         strtok(input, "\n");
-    //     }
+    FILE *pipein;
+    FILE *pipeout;
 
-        // Yafoo
-        // image im = load_image_color(input,0,0);
-        // Load color image from ffmpeg output pipe instead of loading the image from a file as was done above.
-        // Ted Burke
+    for (int i=0; i<2; i++){
 
-#define W 1280
-#define H 720
+        // Load Color Image
+        #define W 1280
+        #define H 720
         unsigned char *data = calloc(H * W * 3, 1);
         int count = -1;
 
         char ffmpeg_command[500];
         snprintf(ffmpeg_command, 500, "ffmpeg -i %s -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", input);
-        FILE *pipein = popen(ffmpeg_command, "r");
+        pipein = popen(ffmpeg_command, "r");
+
+        pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4", "w");
+
         count = fread(data, 1, H * W * 3, pipein);
 
 
@@ -623,15 +616,15 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
             exit(0);
         }
-        if (channels)
-            c = channels;
-        int i, j, k;
+        if (channels) { c = channels; }
+
+        // int i, j, k;
         image im = make_image(w, h, c);
-        for (k = 0; k < c; ++k)
+        for (int k = 0; k < c; ++k)
         {
-            for (j = 0; j < h; ++j)
+            for (int j = 0; j < h; ++j)
             {
-                for (i = 0; i < w; ++i)
+                for (int i = 0; i < w; ++i)
                 {
                     int dst_index = i + w * j + w * h * k;
                     int src_index = k + c * i + c * w * j;
@@ -639,19 +632,13 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
                 }
             }
         }
-        free(data);
+        // free(data);
+
 
         printf("Saving ffmpeg_output\n");
         save_image(im, "ffmpeg_output");
 
-
-
-
         image sized = letterbox_image(im, net->w, net->h);
-        //image sized = resize_image(im, net->w, net->h);
-        //image sized2 = resize_max(im, net->w);
-        //image sized = crop_image(sized2, -((net->w - sized2.w)/2), -((net->h - sized2.h)/2), net->w, net->h);
-        //resize_network(net, sized.w, sized.h);
         layer l = net->layers[net->n-1];
 
 
@@ -668,29 +655,33 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
         draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes);
         free_detections(dets, nboxes);
-        if(outfile){
-            save_image(im, outfile);
+
+
+        // Convert float image to byte image
+        // unsigned char *data = calloc(im.w*im.h*im.c, sizeof(char));
+        // int i,k;
+        for(int k = 0; k < im.c; ++k){
+            for(int i = 0; i < im.w*im.h; ++i){
+                data[i*im.c+k] = (unsigned char) (255*im.data[i + k*im.w*im.h]);
+            }
         }
-        else{
-            save_image(im, "predictions");
-#ifdef OPENCV
-            make_window("predictions", 512, 512, 0);
-            show_image(im, "predictions", 0);
-#endif
-        }
+
+        // Write this frame to the output pipe
+        fwrite(data, 1, H*W*3, pipeout);
+
+        char filename[256];
+        sprintf(filename, "predictions_%d", i);
+        save_image(im, filename);
 
         free_image(im);
         free_image(sized);
+    }
+    // Flush and close input and output pipes
+    fflush(pipein);
+    pclose(pipein);
+    fflush(pipeout);
+    pclose(pipeout);
 
-
-        // Flush and close input and output pipes
-        fflush(pipein);
-        pclose(pipein);
-        // fflush(pipeout);
-        // pclose(pipeout);
-        
-    //     if (filename) break;
-    // }
 }
 
 /*
