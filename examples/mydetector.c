@@ -3,6 +3,11 @@
 make
 clang libdarknet.a examples/mydetector.c -Iinclude -o mydarknet
 ./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
+
+gcc -Iinclude/ -Isrc/ -DGPU -I/usr/local/cuda/include/ -DCUDNN  -Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC -Ofast -DGPU -DCUDNN \
+examples/mydetector.c libdarknet.a -o mydarknet -lm -pthread  -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdarknet.a
+./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
+
 */
 
 #include "darknet.h"
@@ -589,6 +594,12 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     FILE *pipein;
     FILE *pipeout;
 
+    char ffmpeg_command[500];
+    snprintf(ffmpeg_command, 500, "ffmpeg -i %s -f image2pipe -vcodec rawvideo -pix_fmt rgb24 - 2> /dev/null", input);
+    pipein = popen(ffmpeg_command, "r");
+
+    pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4 2> /dev/null", "w");
+
     for (int i=0; i<2; i++){
 
         // Load Color Image
@@ -597,11 +608,6 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         unsigned char *data = calloc(H * W * 3, 1);
         int count = -1;
 
-        char ffmpeg_command[500];
-        snprintf(ffmpeg_command, 500, "ffmpeg -i %s -f image2pipe -vcodec rawvideo -pix_fmt rgb24 -", input);
-        pipein = popen(ffmpeg_command, "r");
-
-        pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4", "w");
 
         count = fread(data, 1, H * W * 3, pipein);
 
@@ -671,7 +677,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
         char filename[256];
         sprintf(filename, "predictions_%d", i);
-        save_image(im, filename);
+        save_image_options(im, filename, PNG, 0);
 
         free_image(im);
         free_image(sized);
