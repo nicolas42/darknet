@@ -6,5 +6,11 @@ wget https://pjreddie.com/media/files/yolov3.weights
 
 
 make
+
+(macos)
 clang libdarknet.a examples/mydetector.c -Iinclude -o mydarknet
+(ubuntu)
+clang examples/mydetector.c -Iinclude libdarknet.a -o mydarknet -pthread -lm
+
+
 ./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
