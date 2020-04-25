@@ -600,7 +600,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
     pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4 2> /dev/null", "w");
 
-    for (int i=0; i<2; i++){
+    for (int i=0; ; i++){
 
         // Load Color Image
         #define W 1280
@@ -608,7 +608,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         unsigned char *data = calloc(H * W * 3, 1);
         int count = -1;
 
-
+	if (feof(pipein)){ break; }
         count = fread(data, 1, H * W * 3, pipein);
 
 
@@ -641,8 +641,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         // free(data);
 
 
-        printf("Saving ffmpeg_output\n");
-        save_image(im, "ffmpeg_output");
+//        printf("Saving ffmpeg_output\n");
+//        save_image(im, "ffmpeg_output");
 
         image sized = letterbox_image(im, net->w, net->h);
         layer l = net->layers[net->n-1];
@@ -675,9 +675,9 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         // Write this frame to the output pipe
         fwrite(data, 1, H*W*3, pipeout);
 
-        char filename[256];
-        sprintf(filename, "predictions_%d", i);
-        save_image_options(im, filename, PNG, 0);
+//        char filename[256];
+//        sprintf(filename, "predictions_%d", i);
+//        save_image_options(im, filename, PNG, 0);
 
         free_image(im);
         free_image(sized);
