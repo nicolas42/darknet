@@ -11,6 +11,10 @@ make
 
 (macos)
 clang libdarknet.a examples/mydetector.c -Iinclude -o mydarknet
+
+(ubuntu no gpu)
+gcc examples/mydetector.c -Iinclude libdarknet.a -o mydarknet -pthread -lm
+
 (ubuntu with gpu and cuda)
 gcc -Iinclude/ -Isrc/ -DGPU -I/usr/local/cuda/include/ -DCUDNN  -Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC -Ofast -DGPU -DCUDNN \
 examples/mydetector.c libdarknet.a -o mydarknet -lm -pthread  -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdarknet.a

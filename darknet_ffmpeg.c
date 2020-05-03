@@ -1,18 +1,165 @@
 
 /*
-make
-clang libdarknet.a examples/mydetector.c -Iinclude -o mydarknet
-./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
 
+POSIX Demo
+
+# get files
+https://drive.google.com/drive/u/0/folders/1IRUZYqhM1UxVs5fbPq3wexYiseJiYMXQ
+teapot.mp4 yolov3.weights
+
+# make the darknet library file libdarknet.a 
+make
+
+# no GPU
+gcc darknet_ffmpeg.c -Iinclude libdarknet.a -o darknet_ffmpeg -pthread -lm  ; \
+
+# GPU
 gcc -Iinclude/ -Isrc/ -DGPU -I/usr/local/cuda/include/ -DCUDNN  -Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC -Ofast -DGPU -DCUDNN \
-examples/mydetector.c libdarknet.a -o mydarknet -lm -pthread  -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdarknet.a
-./mydarknet detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
+darknet_ffmpeg.c libdarknet.a -o darknet_ffmpeg -lm -pthread  -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdarknet.a ; \
+
+./darknet_ffmpeg detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
 
 */
 
 #include "darknet.h"
 
+void run_detector(int argc, char **argv);
+void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen);
+
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
+
+
+
+
+int main(int argc, char **argv)
+{
+    // run_detector basically just runs test_detector in this demo
+    run_detector(argc, argv);
+    return 0;
+}
+
+
+void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
+{
+    list *options = read_data_cfg(datacfg);
+    char *name_list = option_find_str(options, "names", "data/names.list");
+    char **names = get_labels(name_list);
+
+    image **alphabet = load_alphabet();
+    network *net = load_network(cfgfile, weightfile, 0);
+    set_batch_network(net, 1);
+    srand(2222222);
+    double time;
+    char buff[256];
+    char *input = buff;
+    float nms=.45;
+
+
+
+    // Open two pipes to two ffmpeg processes for reading and writing video files
+    strncpy(input, filename, 256);
+
+    FILE *pipein;
+    FILE *pipeout;
+
+    char ffmpeg_command[500];
+    snprintf(ffmpeg_command, 500, "ffmpeg -i %s -f image2pipe -vcodec rawvideo -pix_fmt rgb24 - 2> /dev/null", input);
+    pipein = popen(ffmpeg_command, "r");
+
+    pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4 2> /dev/null", "w");
+
+    for (int i=0; ; i++){
+
+        // Load Color Image
+        #define W 1280
+        #define H 720
+        unsigned char *data = calloc(H * W * 3, 1);
+        int count = -1;
+
+        // Break at the end of the input pipe
+        if (feof(pipein)){ break; }
+            count = fread(data, 1, H * W * 3, pipein);
+
+
+        int w = 1280;
+        int h = 720;
+        int c = 3;
+        int channels = 3;
+
+        if (!data)
+        {
+            fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
+            exit(0);
+        }
+        if (channels) { c = channels; }
+
+        // int i, j, k;
+        image im = make_image(w, h, c);
+        for (int k = 0; k < c; ++k)
+        {
+            for (int j = 0; j < h; ++j)
+            {
+                for (int i = 0; i < w; ++i)
+                {
+                    int dst_index = i + w * j + w * h * k;
+                    int src_index = k + c * i + c * w * j;
+                    im.data[dst_index] = (float)data[src_index] / 255.;
+                }
+            }
+        }
+        // free(data);
+
+
+//        printf("Saving ffmpeg_output\n");
+//        save_image(im, "ffmpeg_output");
+
+        image sized = letterbox_image(im, net->w, net->h);
+        layer l = net->layers[net->n-1];
+
+
+        float *X = sized.data;
+        time=what_time_is_it_now();
+
+        network_predict(net, X);
+        
+        printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
+        int nboxes = 0;
+        detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+        //printf("%d\n", nboxes);
+        //if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
+        if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+        draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes);
+        free_detections(dets, nboxes);
+
+
+        // Convert float image to byte image
+        // unsigned char *data = calloc(im.w*im.h*im.c, sizeof(char));
+        // int i,k;
+        for(int k = 0; k < im.c; ++k){
+            for(int i = 0; i < im.w*im.h; ++i){
+                data[i*im.c+k] = (unsigned char) (255*im.data[i + k*im.w*im.h]);
+            }
+        }
+
+        // Write this frame to the output pipe
+        fwrite(data, 1, H*W*3, pipeout);
+
+       char filename[256];
+       sprintf(filename, "predictions_%d", i);
+       save_image_options(im, filename, PNG, 0);
+       printf("Save image %s.png\n", filename);
+
+        free_image(im);
+        free_image(sized);
+    }
+    // Flush and close input and output pipes
+    fflush(pipein);
+    pclose(pipein);
+    fflush(pipeout);
+    pclose(pipeout);
+
+}
+
 
 
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
@@ -571,125 +718,6 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
 }
 
 
-void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
-{
-    list *options = read_data_cfg(datacfg);
-    char *name_list = option_find_str(options, "names", "data/names.list");
-    char **names = get_labels(name_list);
-
-    image **alphabet = load_alphabet();
-    network *net = load_network(cfgfile, weightfile, 0);
-    set_batch_network(net, 1);
-    srand(2222222);
-    double time;
-    char buff[256];
-    char *input = buff;
-    float nms=.45;
-
-
-
-
-    strncpy(input, filename, 256);
-
-    FILE *pipein;
-    FILE *pipeout;
-
-    char ffmpeg_command[500];
-    snprintf(ffmpeg_command, 500, "ffmpeg -i %s -f image2pipe -vcodec rawvideo -pix_fmt rgb24 - 2> /dev/null", input);
-    pipein = popen(ffmpeg_command, "r");
-
-    pipeout = popen("ffmpeg -y -f rawvideo -vcodec rawvideo -pix_fmt rgb24 -s 1280x720 -r 25 -i - -f mp4 -q:v 5 -an -vcodec mpeg4 output.mp4 2> /dev/null", "w");
-
-    for (int i=0; ; i++){
-
-        // Load Color Image
-        #define W 1280
-        #define H 720
-        unsigned char *data = calloc(H * W * 3, 1);
-        int count = -1;
-
-	if (feof(pipein)){ break; }
-        count = fread(data, 1, H * W * 3, pipein);
-
-
-        int w = 1280;
-        int h = 720;
-        int c = 3;
-        int channels = 3;
-
-        if (!data)
-        {
-            fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
-            exit(0);
-        }
-        if (channels) { c = channels; }
-
-        // int i, j, k;
-        image im = make_image(w, h, c);
-        for (int k = 0; k < c; ++k)
-        {
-            for (int j = 0; j < h; ++j)
-            {
-                for (int i = 0; i < w; ++i)
-                {
-                    int dst_index = i + w * j + w * h * k;
-                    int src_index = k + c * i + c * w * j;
-                    im.data[dst_index] = (float)data[src_index] / 255.;
-                }
-            }
-        }
-        // free(data);
-
-
-//        printf("Saving ffmpeg_output\n");
-//        save_image(im, "ffmpeg_output");
-
-        image sized = letterbox_image(im, net->w, net->h);
-        layer l = net->layers[net->n-1];
-
-
-        float *X = sized.data;
-        time=what_time_is_it_now();
-
-        network_predict(net, X);
-        
-        printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
-        int nboxes = 0;
-        detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
-        //printf("%d\n", nboxes);
-        //if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
-        if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
-        draw_detections(im, dets, nboxes, thresh, names, alphabet, l.classes);
-        free_detections(dets, nboxes);
-
-
-        // Convert float image to byte image
-        // unsigned char *data = calloc(im.w*im.h*im.c, sizeof(char));
-        // int i,k;
-        for(int k = 0; k < im.c; ++k){
-            for(int i = 0; i < im.w*im.h; ++i){
-                data[i*im.c+k] = (unsigned char) (255*im.data[i + k*im.w*im.h]);
-            }
-        }
-
-        // Write this frame to the output pipe
-        fwrite(data, 1, H*W*3, pipeout);
-
-//        char filename[256];
-//        sprintf(filename, "predictions_%d", i);
-//        save_image_options(im, filename, PNG, 0);
-
-        free_image(im);
-        free_image(sized);
-    }
-    // Flush and close input and output pipes
-    fflush(pipein);
-    pclose(pipein);
-    fflush(pipeout);
-    pclose(pipeout);
-
-}
-
 /*
 void censor_detector(char *datacfg, char *cfgfile, char *weightfile, int cam_index, const char *filename, int class, float thresh, int skip)
 {
@@ -917,10 +945,4 @@ void run_detector(int argc, char **argv)
     }
     //else if(0==strcmp(argv[2], "extract")) extract_detector(datacfg, cfg, weights, cam_index, filename, class, thresh, frame_skip);
     //else if(0==strcmp(argv[2], "censor")) censor_detector(datacfg, cfg, weights, cam_index, filename, class, thresh, frame_skip);
-}
-
-int main(int argc, char **argv)
-{
-    run_detector(argc, argv);
-    return 0;
 }
