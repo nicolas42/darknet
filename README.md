@@ -8,12 +8,7 @@ This is a fork of http://github.com/pjreddie/darknet
 make
 gcc darknet_ffmpeg.c -Iinclude libdarknet.a -o darknet_ffmpeg -pthread -lm
 
-## get video
-aws s3 cp s3://bitwise-nick/videos/test.mp4 .
-
-## Run Yolov3 tiny
-aws s3 cp s3://bitwise-nick/weights/yolov3-tiny.weights .
-aws s3 cp s3://bitwise-nick/weights/yolov3-tiny.cfg .
+# Run demo
 ./darknet_ffmpeg detector test cfg/coco.data yolov3-tiny.cfg yolov3-tiny.weights test.mp4
 
 
@@ -23,7 +18,7 @@ gcc -Iinclude/ -Isrc/ -DGPU -I/usr/local/cuda/include/ -DCUDNN  -Wall -Wno-unuse
 darknet_ffmpeg.c libdarknet.a -o darknet_ffmpeg -lm -pthread  -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdarknet.a
 
 
-## Run Yolov3
+## Get and Run Yolov3
 aws s3 cp s3://bitwise-nick/weights/yolov3.weights .
 aws s3 cp s3://bitwise-nick/weights/yolov3.cfg .
 ./darknet_ffmpeg detector test cfg/coco.data yolov3.cfg yolov3.weights test.mp4
