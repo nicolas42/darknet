@@ -1,23 +1,35 @@
-
 /*
 
-POSIX Demo
+# Install
 
-# get files
-https://drive.google.com/drive/u/0/folders/1IRUZYqhM1UxVs5fbPq3wexYiseJiYMXQ
-teapot.mp4 yolov3.weights
-
-# make the darknet library file libdarknet.a 
+## make libdarknet.a 
 make
 
-# no GPU
-gcc darknet_ffmpeg.c -Iinclude libdarknet.a -o darknet_ffmpeg -pthread -lm  ; \
+## Make with CPU or GPU
 
-# GPU
+## CPU
+gcc darknet_ffmpeg.c -Iinclude libdarknet.a -o darknet_ffmpeg -pthread -lm
+
+## GPU
 gcc -Iinclude/ -Isrc/ -DGPU -I/usr/local/cuda/include/ -DCUDNN  -Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC -Ofast -DGPU -DCUDNN \
 darknet_ffmpeg.c libdarknet.a -o darknet_ffmpeg -lm -pthread  -L/usr/local/cuda/lib64 -lcuda -lcudart -lcublas -lcurand -lcudnn -lstdc++  libdarknet.a ; \
 
-./darknet_ffmpeg detector test cfg/coco.data cfg/yolov3.cfg yolov3.weights teapot.mp4
+
+# Run demo
+
+## get video
+aws s3 cp s3://bitwise-nick/videos/test.mp4 .
+
+## Yolov3 tiny
+aws s3 cp s3://bitwise-nick/weights/yolov3-tiny.weights .
+aws s3 cp s3://bitwise-nick/weights/yolov3-tiny.cfg .
+./darknet_ffmpeg detector test cfg/coco.data yolov3-tiny.cfg yolov3-tiny.weights test.mp4
+
+## Yolov3
+aws s3 cp s3://bitwise-nick/weights/yolov3.weights .
+aws s3 cp s3://bitwise-nick/weights/yolov3.cfg .
+./darknet_ffmpeg detector test cfg/coco.data yolov3.cfg yolov3.weights test.mp4
+
 
 */
 
@@ -144,6 +156,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         // Write this frame to the output pipe
         fwrite(data, 1, H*W*3, pipeout);
 
+        // Save a freakin image
        char filename[256];
        sprintf(filename, "predictions_%d", i);
        save_image_options(im, filename, PNG, 0);
