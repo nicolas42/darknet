@@ -36,3 +36,7 @@ Thumbs.db
 *.so
 a.out
 mydarknet
+
+!yolov3-tiny.weights
+!yolov3-tiny.cfg
+!test.mp4
